@@ -6,16 +6,27 @@
 // si algo falla recién al escribir (una restricción de la base, por
 // ejemplo).
 //
-// La columna de código: `ColumnaExcel.clave` de esa columna tiene que
-// coincidir con el nombre real de la columna en la tabla (`columna.name`
-// de Drizzle) para que la búsqueda funcione — en este proyecto los
-// nombres de columna son una sola palabra en español, así que TS y SQL
-// ya coinciden sin que haga falta un mapeo aparte.
+// La columna de código: `resultado.validas[].valores` viene indexado por
+// `ColumnaExcel.clave`, que es la clave de TS/Drizzle (`codigoBarras`),
+// no el nombre real de la columna en SQL (`codigo_barras`). Con columnas
+// de una sola palabra las dos coinciden por casualidad; con cualquier
+// columna de más de una palabra no. Por eso la clave para buscar el
+// valor se deriva de la propia tabla (`claveDeColumna`) en vez de leer
+// `columnaCodigo.name` a secas.
 
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import type { ResultadoValidacion } from "./tipos";
+
+function claveDeColumna(tabla: SQLiteTable, columna: SQLiteColumn): string {
+  const columnas = getTableColumns(tabla);
+  const entrada = Object.entries(columnas).find(([, valor]) => valor === columna);
+  if (!entrada) {
+    throw new Error("La columna de código no pertenece a la tabla indicada.");
+  }
+  return entrada[0];
+}
 
 export async function aplicarImportacion(
   // `any`: la función es genérica sobre cualquier esquema de Drizzle,
@@ -31,12 +42,14 @@ export async function aplicarImportacion(
     );
   }
 
+  const claveCodigo = claveDeColumna(tabla, columnaCodigo);
+
   return db.transaction(async (tx) => {
     let creadas = 0;
     let actualizadas = 0;
 
     for (const fila of resultado.validas) {
-      const codigo = fila.valores[columnaCodigo.name];
+      const codigo = fila.valores[claveCodigo];
       const existente = await tx.select().from(tabla).where(eq(columnaCodigo, codigo)).limit(1);
 
       if (existente.length > 0) {

@@ -28,6 +28,10 @@ pub const MIGRACIONES: &[Migracion] = &[
         version: 1,
         sql: include_str!("../../../migraciones/0001_respaldos.sql"),
     },
+    Migracion {
+        version: 2,
+        sql: include_str!("../../../migraciones/0002_modulo_stock.sql"),
+    },
 ];
 
 async fn version_maxima_aplicada(pool: &SqlitePool) -> Result<i64, Box<dyn Error + Send + Sync>> {
@@ -187,6 +191,142 @@ mod tests {
         aplicar(&pool, MIGRACIONES).await.unwrap();
 
         assert!(!hay_pendientes(&pool, MIGRACIONES).await.unwrap());
+    }
+
+    // Base con la fundación completa + Módulo 1 (Stock) ya migrados, y un
+    // comercio + usuario base para poder insertar productos/ajustes sin
+    // romper sus claves foráneas.
+    async fn base_con_stock() -> (tempfile::TempDir, SqlitePool) {
+        let (carpeta, pool) = base_temporal().await;
+        aplicar(&pool, MIGRACIONES).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO comercio (id, nombre, rubro, vende_por_peso) VALUES (1, 'Mini Market Marlyn', 'despensa', true)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO usuario (nombre, rol) VALUES ('Dueño', 'admin')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        (carpeta, pool)
+    }
+
+    #[tokio::test]
+    async fn producto_rechaza_costo_o_precio_negativo() {
+        let (_carpeta, pool) = base_con_stock().await;
+
+        let costo_negativo =
+            sqlx::query("INSERT INTO producto (nombre, costo) VALUES ('Yerba', -1)")
+                .execute(&pool)
+                .await;
+        assert!(costo_negativo.is_err());
+
+        let precio_negativo =
+            sqlx::query("INSERT INTO producto (nombre, precio) VALUES ('Yerba', -1)")
+                .execute(&pool)
+                .await;
+        assert!(precio_negativo.is_err());
+    }
+
+    #[tokio::test]
+    async fn producto_que_no_se_vende_por_peso_exige_stock_entero() {
+        let (_carpeta, pool) = base_con_stock().await;
+
+        let fraccionario = sqlx::query(
+            "INSERT INTO producto (nombre, se_vende_por_peso, stock_actual) VALUES ('Fideos', false, 2.5)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(fraccionario.is_err(), "un producto por unidad no puede tener stock fraccionario");
+
+        let entero = sqlx::query(
+            "INSERT INTO producto (nombre, se_vende_por_peso, stock_actual) VALUES ('Fideos', false, 2)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(entero.is_ok());
+
+        let pesable = sqlx::query(
+            "INSERT INTO producto (nombre, se_vende_por_peso, stock_actual) VALUES ('Queso', true, 1.750)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(pesable.is_ok(), "un producto por peso sí puede tener stock fraccionario");
+    }
+
+    #[tokio::test]
+    async fn producto_permite_varios_sin_codigo_pero_rechaza_codigo_repetido() {
+        let (_carpeta, pool) = base_con_stock().await;
+
+        sqlx::query("INSERT INTO producto (nombre) VALUES ('Sin código 1')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO producto (nombre) VALUES ('Sin código 2')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("INSERT INTO producto (nombre, codigo_barras) VALUES ('A1', '7791234567890')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let duplicado = sqlx::query(
+            "INSERT INTO producto (nombre, codigo_barras) VALUES ('A2', '7791234567890')",
+        )
+        .execute(&pool)
+        .await;
+        assert!(duplicado.is_err(), "dos productos no pueden compartir código de barras");
+    }
+
+    #[tokio::test]
+    async fn ajuste_stock_rechaza_cantidad_cero_y_motivo_invalido() {
+        let (_carpeta, pool) = base_con_stock().await;
+
+        sqlx::query("INSERT INTO producto (nombre, stock_actual) VALUES ('Yerba', 10)")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let cantidad_cero = sqlx::query(
+            "INSERT INTO ajuste_stock (producto_id, cantidad, motivo, stock_resultante, usuario_id) VALUES (1, 0, 'conteo', 10, 1)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(cantidad_cero.is_err());
+
+        let motivo_invalido = sqlx::query(
+            "INSERT INTO ajuste_stock (producto_id, cantidad, motivo, stock_resultante, usuario_id) VALUES (1, -1, 'porque sí', 9, 1)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(motivo_invalido.is_err());
+
+        let valido = sqlx::query(
+            "INSERT INTO ajuste_stock (producto_id, cantidad, motivo, stock_resultante, usuario_id) VALUES (1, -1, 'rotura', 9, 1)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(valido.is_ok());
+    }
+
+    #[tokio::test]
+    async fn ajuste_stock_respeta_las_claves_foraneas() {
+        // `base_temporal()` conecta con `conectar_en` (conexion.rs), que ya
+        // deja `foreign_keys` en ON — no hace falta prenderlo a mano acá,
+        // y probarlo sin eso sería probar una conexión distinta a la real.
+        let (_carpeta, pool) = base_con_stock().await;
+
+        let producto_inexistente = sqlx::query(
+            "INSERT INTO ajuste_stock (producto_id, cantidad, motivo, stock_resultante, usuario_id) VALUES (999, 1, 'conteo', 1, 1)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(producto_inexistente.is_err());
     }
 
     #[tokio::test]
