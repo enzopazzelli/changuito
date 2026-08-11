@@ -1,5 +1,7 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState, type FormEvent } from "react";
 import "./estilos/tema.css";
+import { consultarActualizacion, type ResultadoActualizacion } from "./nucleo/actualizaciones";
 import { guardarComercio, obtenerComercio, type DatosComercio } from "./nucleo/datos";
 
 type Comercio = Awaited<ReturnType<typeof obtenerComercio>>;
@@ -13,6 +15,8 @@ function App() {
   const [datos, setDatos] = useState<DatosComercio>({ nombre: "", rubro: "", cuit: "" });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actualizacion, setActualizacion] = useState<ResultadoActualizacion>({ hayNueva: false });
+  const [avisoOculto, setAvisoOculto] = useState(false);
 
   useEffect(() => {
     obtenerComercio()
@@ -21,6 +25,13 @@ function App() {
         console.error("No se pudo leer el comercio:", motivo);
         setError("No se pudo leer los datos del comercio.");
       });
+  }, []);
+
+  useEffect(() => {
+    // No bloquea nada: corre en paralelo, y si falla (sin conexión,
+    // lo que sea) consultarActualizacion ya devuelve "no hay nada
+    // nuevo" en silencio (§5.4).
+    consultarActualizacion().then(setActualizacion);
   }, []);
 
   async function alGuardar(evento: FormEvent) {
@@ -55,63 +66,95 @@ function App() {
     return null;
   }
 
-  if (!comercio) {
-    return (
-      <main className="flex h-screen items-center justify-center bg-fondo">
-        <form
-          onSubmit={alGuardar}
-          className="w-full max-w-sm rounded-base border border-linea bg-superficie p-6"
-        >
-          <h1 className="mb-4 text-xl font-semibold text-texto">Antes de arrancar</h1>
-
-          <label className="mb-3 block text-sm text-texto">
-            Nombre del comercio
-            <input
-              required
-              className="mt-1 w-full rounded-base border border-linea px-3 py-2 text-texto"
-              value={datos.nombre}
-              onChange={(evento) => setDatos({ ...datos, nombre: evento.target.value })}
-            />
-          </label>
-
-          <label className="mb-3 block text-sm text-texto">
-            Rubro
-            <input
-              required
-              className="mt-1 w-full rounded-base border border-linea px-3 py-2 text-texto"
-              value={datos.rubro}
-              onChange={(evento) => setDatos({ ...datos, rubro: evento.target.value })}
-            />
-          </label>
-
-          <label className="mb-4 block text-sm text-texto">
-            CUIT (opcional)
-            <input
-              className="mt-1 w-full rounded-base border border-linea px-3 py-2 text-texto"
-              value={datos.cuit ?? ""}
-              onChange={(evento) => setDatos({ ...datos, cuit: evento.target.value })}
-            />
-          </label>
-
-          {error && <p className="mb-3 text-sm text-alerta">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={guardando}
-            className="w-full rounded-base bg-acento px-3 py-2 font-medium text-acento-texto disabled:opacity-50"
-          >
-            {guardando ? "Guardando…" : "Empezar"}
-          </button>
-        </form>
-      </main>
-    );
-  }
-
   return (
-    <main className="flex h-screen flex-col items-center justify-center gap-2 bg-fondo text-texto">
-      <h1 className="text-3xl font-semibold">Changuito</h1>
-      <p className="text-texto-suave">Sistema de gestión — fundación en construcción</p>
-    </main>
+    <>
+      {actualizacion.hayNueva && !avisoOculto && (
+        <AvisoActualizacion resultado={actualizacion} onCerrar={() => setAvisoOculto(true)} />
+      )}
+
+      {!comercio ? (
+        <main className="flex h-screen items-center justify-center bg-fondo">
+          <form
+            onSubmit={alGuardar}
+            className="w-full max-w-sm rounded-base border border-linea bg-superficie p-6"
+          >
+            <h1 className="mb-4 text-xl font-semibold text-texto">Antes de arrancar</h1>
+
+            <label className="mb-3 block text-sm text-texto">
+              Nombre del comercio
+              <input
+                required
+                className="mt-1 w-full rounded-base border border-linea px-3 py-2 text-texto"
+                value={datos.nombre}
+                onChange={(evento) => setDatos({ ...datos, nombre: evento.target.value })}
+              />
+            </label>
+
+            <label className="mb-3 block text-sm text-texto">
+              Rubro
+              <input
+                required
+                className="mt-1 w-full rounded-base border border-linea px-3 py-2 text-texto"
+                value={datos.rubro}
+                onChange={(evento) => setDatos({ ...datos, rubro: evento.target.value })}
+              />
+            </label>
+
+            <label className="mb-4 block text-sm text-texto">
+              CUIT (opcional)
+              <input
+                className="mt-1 w-full rounded-base border border-linea px-3 py-2 text-texto"
+                value={datos.cuit ?? ""}
+                onChange={(evento) => setDatos({ ...datos, cuit: evento.target.value })}
+              />
+            </label>
+
+            {error && <p className="mb-3 text-sm text-alerta">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={guardando}
+              className="w-full rounded-base bg-acento px-3 py-2 font-medium text-acento-texto disabled:opacity-50"
+            >
+              {guardando ? "Guardando…" : "Empezar"}
+            </button>
+          </form>
+        </main>
+      ) : (
+        <main className="flex h-screen flex-col items-center justify-center gap-2 bg-fondo text-texto">
+          <h1 className="text-3xl font-semibold">Changuito</h1>
+          <p className="text-texto-suave">Sistema de gestión — fundación en construcción</p>
+        </main>
+      )}
+    </>
+  );
+}
+
+function AvisoActualizacion({
+  resultado,
+  onCerrar,
+}: {
+  resultado: Extract<ResultadoActualizacion, { hayNueva: true }>;
+  onCerrar: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-marco px-4 py-2 text-sm text-fondo">
+      <span>
+        Hay una versión nueva ({resultado.version}).
+      </span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded-base bg-acento px-3 py-1 font-medium text-acento-texto"
+          onClick={() => openUrl(resultado.url)}
+        >
+          Actualizar ahora
+        </button>
+        <button type="button" className="text-fondo underline" onClick={onCerrar}>
+          Más tarde
+        </button>
+      </div>
+    </div>
   );
 }
 

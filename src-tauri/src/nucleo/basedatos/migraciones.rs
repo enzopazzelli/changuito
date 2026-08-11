@@ -30,10 +30,7 @@ pub const MIGRACIONES: &[Migracion] = &[
     },
 ];
 
-pub async fn aplicar(
-    pool: &SqlitePool,
-    migraciones: &[Migracion],
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn version_maxima_aplicada(pool: &SqlitePool) -> Result<i64, Box<dyn Error + Send + Sync>> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS migracion (
             version INTEGER PRIMARY KEY,
@@ -43,10 +40,29 @@ pub async fn aplicar(
     .execute(pool)
     .await?;
 
-    let maxima_aplicada: i64 =
-        sqlx::query_scalar("SELECT COALESCE(MAX(version), -1) FROM migracion")
-            .fetch_one(pool)
-            .await?;
+    let maxima: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(version), -1) FROM migracion")
+        .fetch_one(pool)
+        .await?;
+
+    Ok(maxima)
+}
+
+/// Para decidir si hace falta respaldar antes de arrancar (§5.4): "antes
+/// de cualquier migración de base, respaldo automático". No aplica
+/// nada, solo mira si haría falta.
+pub async fn hay_pendientes(
+    pool: &SqlitePool,
+    migraciones: &[Migracion],
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    let maxima_aplicada = version_maxima_aplicada(pool).await?;
+    Ok(migraciones.iter().any(|m| m.version > maxima_aplicada))
+}
+
+pub async fn aplicar(
+    pool: &SqlitePool,
+    migraciones: &[Migracion],
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let maxima_aplicada = version_maxima_aplicada(pool).await?;
 
     for migracion in migraciones {
         if migracion.version <= maxima_aplicada {
@@ -160,5 +176,42 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(filas, 4);
+    }
+
+    #[tokio::test]
+    async fn hay_pendientes_dice_la_verdad() {
+        let (_carpeta, pool) = base_temporal().await;
+
+        assert!(hay_pendientes(&pool, MIGRACIONES).await.unwrap());
+
+        aplicar(&pool, MIGRACIONES).await.unwrap();
+
+        assert!(!hay_pendientes(&pool, MIGRACIONES).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn respaldar_antes_de_una_migracion_que_falla_deja_el_respaldo_previo_intacto() {
+        use crate::nucleo::respaldo::motor;
+
+        let (carpeta, pool) = base_temporal().await;
+        let carpeta_respaldos = carpeta.path().join("respaldos");
+
+        let migraciones_sinteticas = [Migracion {
+            version: 0,
+            sql: "ESTO NO ES SQL VALIDO;",
+        }];
+
+        assert!(hay_pendientes(&pool, &migraciones_sinteticas).await.unwrap());
+
+        // Secuencia que hace lib.rs en el arranque real: respaldar
+        // primero, recién después intentar migrar.
+        let ruta_respaldo = motor::respaldar(&pool, &carpeta_respaldos).await.unwrap();
+        let resultado = aplicar(&pool, &migraciones_sinteticas).await;
+
+        assert!(resultado.is_err(), "la migración sintética tiene que fallar");
+        assert!(
+            ruta_respaldo.exists(),
+            "el respaldo hecho antes de migrar tiene que seguir existiendo, migración fallida o no"
+        );
     }
 }

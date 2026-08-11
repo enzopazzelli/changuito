@@ -77,6 +77,25 @@ pub fn run() {
             // corre las migraciones pendientes al arrancar (§5.2).
             let pool = tauri::async_runtime::block_on(async {
                 let pool = conexion::conectar(&handle).await?;
+
+                // Antes de cualquier migración pendiente, respaldo
+                // automático (§5.4): si la migración falla, el respaldo
+                // previo existe. Si el respaldo en sí falla, no frena
+                // el arranque ni la migración — perder el respaldo
+                // previo es peor que arrancar sin uno, no al revés.
+                if migraciones::hay_pendientes(&pool, migraciones::MIGRACIONES).await? {
+                    if let Ok(directorio_datos) = rutas::directorio_datos(&handle) {
+                        let carpeta = motor_respaldo::carpeta_configurada(
+                            &pool,
+                            &directorio_datos.join("respaldos"),
+                        )
+                        .await;
+                        if let Err(error) = motor_respaldo::respaldar(&pool, &carpeta).await {
+                            registrar_error(&format!("no se pudo respaldar antes de migrar: {error}"));
+                        }
+                    }
+                }
+
                 migraciones::aplicar(&pool, migraciones::MIGRACIONES).await?;
 
                 // "Una vez por día" (§5.3): se revisa al arrancar en vez
