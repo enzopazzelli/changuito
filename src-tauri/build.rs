@@ -5,7 +5,12 @@ fn main() {
     // se ve como si el comando simplemente hubiera fallado.
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(
-            tauri_build::AppManifest::new().commands(&["bd_ejecutar", "bd_consultar"]),
+            tauri_build::AppManifest::new().commands(&[
+                "bd_ejecutar",
+                "bd_consultar",
+                "respaldo_manual",
+                "respaldo_restaurar",
+            ]),
         ),
     )
     .expect("error al generar el manifiesto de comandos de Tauri");

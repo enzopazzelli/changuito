@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-respaldo-restaurar"
+description = "Enables the respaldo_restaurar command without any pre-configured scope."
+commands.allow = ["respaldo_restaurar"]
+
+[[permission]]
+identifier = "deny-respaldo-restaurar"
+description = "Denies the respaldo_restaurar command without any pre-configured scope."
+commands.deny = ["respaldo_restaurar"]

@@ -20,6 +20,9 @@ export const comercio = sqliteTable(
       .notNull()
       .default(false),
     vendePorPeso: integer("vende_por_peso", { mode: "boolean" }).notNull().default(false),
+    // Vacía = default en Rust (AppData\Roaming\Changuito\respaldos\).
+    // Se completa cuando exista la pantalla para apuntarla a Drive/OneDrive.
+    carpetaRespaldos: text("carpeta_respaldos"),
   },
   // Regla §10.1: el invariante de "solo puede haber un comercio" vive en
   // un CHECK, no en una consulta previa al insert.

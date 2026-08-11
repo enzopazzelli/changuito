@@ -19,10 +19,16 @@ pub struct Migracion {
     pub sql: &'static str,
 }
 
-pub const MIGRACIONES: &[Migracion] = &[Migracion {
-    version: 0,
-    sql: include_str!("../../../migraciones/0000_fundacion.sql"),
-}];
+pub const MIGRACIONES: &[Migracion] = &[
+    Migracion {
+        version: 0,
+        sql: include_str!("../../../migraciones/0000_fundacion.sql"),
+    },
+    Migracion {
+        version: 1,
+        sql: include_str!("../../../migraciones/0001_respaldos.sql"),
+    },
+];
 
 pub async fn aplicar(
     pool: &SqlitePool,

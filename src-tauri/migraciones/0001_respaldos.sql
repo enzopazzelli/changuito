@@ -1,0 +1,1 @@
+ALTER TABLE `comercio` ADD `carpeta_respaldos` text;
