@@ -1,0 +1,53 @@
+/* Único lugar del proyecto donde puede aparecer un valor de color literal
+   (§8.1). Ningún componente ni módulo escribe un #hex o un rgba() propio:
+   si hace falta un color que no está acá, se agrega el token, no el
+   literal. */
+@import "tailwindcss";
+
+:root {
+  /* --- Estructura --- */
+  --marco: #0f1e1b; /* barra lateral, bloques oscuros, total */
+  --marco-suave: #1b2e2a;
+  --fondo: #f1efe9; /* área de trabajo */
+  --superficie: #ffffff; /* tarjetas, tablas, campos */
+  --linea: #dbd7ce;
+  --texto: #0f1e1b;
+  --texto-suave: #6e7c78;
+
+  /* --- Marca (lo que se cambia por comercio) --- */
+  --acento: #ffd11a; /* SOLO totales, pantalla al cliente y CTA principal */
+  --acento-texto: #0f1e1b;
+
+  /* --- Semánticos (NO se cambian: significan algo) --- */
+  --ok: #1f7a5c;
+  --ok-fondo: #e4f0ea;
+  --alerta: #c8452f;
+  --alerta-fondo: #fceeea;
+
+  /* --- Forma --- */
+  --r: 10px;
+}
+
+/* Puente hacia Tailwind: expone los tokens de arriba como utilidades
+   (bg-marco, text-acento, rounded-base, ...) sin duplicar los valores. */
+@theme inline {
+  --color-marco: var(--marco);
+  --color-marco-suave: var(--marco-suave);
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-linea: var(--linea);
+  --color-texto: var(--texto);
+  --color-texto-suave: var(--texto-suave);
+  --color-acento: var(--acento);
+  --color-acento-texto: var(--acento-texto);
+  --color-ok: var(--ok);
+  --color-ok-fondo: var(--ok-fondo);
+  --color-alerta: var(--alerta);
+  --color-alerta-fondo: var(--alerta-fondo);
+  --radius-base: var(--r);
+}
+
+body {
+  background-color: var(--fondo);
+  color: var(--texto);
+}

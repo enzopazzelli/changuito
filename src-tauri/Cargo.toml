@@ -1,0 +1,30 @@
+[package]
+name = "changuito"
+version = "0.1.0"
+description = "Sistema de gestión para comercios chicos y medianos"
+authors = ["Enzo Pazzelli"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# El sufijo `_lib` evita que el nombre de la lib choque con el del binario.
+# Es un problema solo en Windows: https://github.com/rust-lang/cargo/issues/8519
+name = "changuito_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[dev-dependencies]
+tempfile = "3"
+
