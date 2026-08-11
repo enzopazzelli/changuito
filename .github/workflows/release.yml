@@ -1,0 +1,63 @@
+# Publicar una versión es pushear un tag (§12 del prompt base) — nada
+# de pasos manuales que se olvidan. Antes de pushear el tag, actualizar
+# a mano la versión en src-tauri/tauri.conf.json (y de paso package.json
+# y src-tauri/Cargo.toml) para que coincida con el tag: es lo que
+# getVersion() le va a reportar a la app, y es contra eso que el punto 5
+# compara la última release.
+#
+# Sin variables de firma: no hay certificado de código ni updater
+# automático (decisión del punto 5), así que tauri-action solo compila
+# y publica, sin firmar nada.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Instalar dependencias del frontend
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Tests del frontend
+        run: npm run test
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Tests de Rust
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Compilar y publicar
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: Ver los archivos adjuntos para descargar e instalar esta versión.
+          releaseDraft: true
+          prerelease: false
