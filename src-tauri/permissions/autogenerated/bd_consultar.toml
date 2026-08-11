@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bd-consultar"
+description = "Enables the bd_consultar command without any pre-configured scope."
+commands.allow = ["bd_consultar"]
+
+[[permission]]
+identifier = "deny-bd-consultar"
+description = "Denies the bd_consultar command without any pre-configured scope."
+commands.deny = ["bd_consultar"]

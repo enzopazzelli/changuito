@@ -1,5 +1,6 @@
 mod nucleo;
 
+use nucleo::basedatos::{comandos, conexion, migraciones};
 use nucleo::registro::RegistradorErrores;
 use nucleo::rutas;
 use std::sync::OnceLock;
@@ -28,6 +29,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            comandos::bd_ejecutar,
+            comandos::bd_consultar
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             let directorio_logs = rutas::directorio_logs(&handle)?;
@@ -37,6 +42,16 @@ pub fn run() {
             std::panic::set_hook(Box::new(|info| {
                 registrar_error(&format!("panic: {info}"));
             }));
+
+            // Tiene que estar lista antes de que la ventana quede usable:
+            // corre las migraciones pendientes al arrancar (§5.2).
+            let pool = tauri::async_runtime::block_on(async {
+                let pool = conexion::conectar(&handle).await?;
+                migraciones::aplicar(&pool, migraciones::MIGRACIONES).await?;
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(pool)
+            })
+            .map_err(|error| error.to_string())?;
+            app.manage(pool);
 
             Ok(())
         })

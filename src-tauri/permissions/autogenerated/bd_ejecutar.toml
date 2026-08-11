@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bd-ejecutar"
+description = "Enables the bd_ejecutar command without any pre-configured scope."
+commands.allow = ["bd_ejecutar"]
+
+[[permission]]
+identifier = "deny-bd-ejecutar"
+description = "Denies the bd_ejecutar command without any pre-configured scope."
+commands.deny = ["bd_ejecutar"]
